@@ -40,15 +40,15 @@ class ScreenshotItemDelegate(QStyledItemDelegate):
         if option.state & QStyle.StateFlag.State_Selected:
             painter.fillRect(option.rect, QColor("#0078D4"))
         elif option.state & QStyle.StateFlag.State_MouseOver:
-            painter.fillRect(option.rect, QColor("#E5F3FF"))
+            painter.fillRect(option.rect, QColor("#3d3d3d"))
         else:
-            painter.fillRect(option.rect, QColor("white"))
+            painter.fillRect(option.rect, QColor("#2d2d2d"))
         
         # 绘制缩略图占位
         thumb_rect = option.rect.adjusted(self.padding, self.padding, 
                                           -option.rect.width() + self.thumbnail_size.width() + self.padding * 2, 
                                           -self.padding)
-        painter.setPen(QColor("#CCCCCC"))
+        painter.setPen(QColor("#555555"))
         painter.drawRect(thumb_rect)
         
         # 绘制标题
@@ -56,7 +56,7 @@ class ScreenshotItemDelegate(QStyledItemDelegate):
                                           self.padding + 5,
                                           -self.padding, 
                                           0)
-        painter.setPen(QColor("white" if option.state & QStyle.StateFlag.State_Selected else "#333333"))
+        painter.setPen(QColor("white"))
         font = QFont("Microsoft YaHei", 10, QFont.Weight.Bold)
         painter.setFont(font)
         title = metadata.title if metadata.title else metadata.filename
@@ -67,7 +67,7 @@ class ScreenshotItemDelegate(QStyledItemDelegate):
                                          self.padding + 30,
                                          -self.padding, 
                                          0)
-        painter.setPen(QColor("white" if option.state & QStyle.StateFlag.State_Selected else "#666666"))
+        painter.setPen(QColor("#aaaaaa"))
         font = QFont("Microsoft YaHei", 8)
         painter.setFont(font)
         if metadata.created_at:
@@ -119,7 +119,7 @@ class HistoryListWidget(QWidget):
         
         # 搜索栏
         search_frame = QFrame()
-        search_frame.setStyleSheet("background-color: #f5f5f5; border-bottom: 1px solid #ddd;")
+        search_frame.setStyleSheet("background-color: #2d2d2d; border-bottom: 1px solid #555;")
         search_layout = QHBoxLayout(search_frame)
         search_layout.setContentsMargins(10, 10, 10, 10)
         
@@ -127,10 +127,11 @@ class HistoryListWidget(QWidget):
         self.search_edit.setPlaceholderText("搜索标题、标签、备注...")
         self.search_edit.setStyleSheet("""
             QLineEdit {
-                border: 1px solid #ccc;
+                border: 1px solid #555;
                 border-radius: 4px;
                 padding: 6px;
-                background: white;
+                background: #3d3d3d;
+                color: white;
             }
         """)
         self.search_edit.textChanged.connect(self._on_search_text_changed)
@@ -143,11 +144,11 @@ class HistoryListWidget(QWidget):
             QPushButton {
                 border: none;
                 background: transparent;
-                color: #666;
+                color: #aaa;
                 font-size: 14px;
             }
             QPushButton:hover {
-                color: #333;
+                color: white;
             }
         """)
         self.clear_btn.clicked.connect(self._clear_search)
@@ -164,11 +165,11 @@ class HistoryListWidget(QWidget):
         self.list_widget.setStyleSheet("""
             QListWidget {
                 border: none;
-                background-color: white;
+                background-color: #2d2d2d;
                 outline: none;
             }
             QListWidget::item {
-                border-bottom: 1px solid #eee;
+                border-bottom: 1px solid #555;
             }
         """)
         
@@ -180,7 +181,7 @@ class HistoryListWidget(QWidget):
         
         # 状态栏
         self.status_label = QLabel("共 0 张截图")
-        self.status_label.setStyleSheet("color: #666; padding: 5px;")
+        self.status_label.setStyleSheet("color: #aaa; padding: 5px; background-color: #2d2d2d; border-top: 1px solid #555;")
         layout.addWidget(self.status_label)
         
     def set_screenshots(self, screenshots: List[ScreenshotMetadata]):

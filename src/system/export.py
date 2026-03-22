@@ -8,7 +8,7 @@ from typing import List, Optional, Callable
 from pathlib import Path
 from datetime import datetime
 
-from PyQt6.QtCore import QObject, pyqtSignal, QThread
+from PyQt6.QtCore import QObject, pyqtSignal, QThread, QMarginsF, Qt
 from PyQt6.QtGui import QPixmap, QImage, QPainter, QPdfWriter, QPageSize
 
 
@@ -45,8 +45,9 @@ class ExportWorker(QThread):
         
         # 创建PDF写入器
         writer = QPdfWriter(self.output_path)
-        writer.setPageSize(QPageSize.PageSize.A4)
+        writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
         writer.setResolution(150)
+        writer.setPageMargins(QMarginsF(0, 0, 0, 0))
         
         painter = QPainter(writer)
         total = len(self.source_paths)

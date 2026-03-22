@@ -282,10 +282,11 @@ class MainWindow(QMainWindow):
         filename = f"screenshot_{timestamp}.png"
         
         # 保存图片
-        import io
-        buffer = io.BytesIO()
+        from PyQt6.QtCore import QBuffer, QIODevice
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
         result.pixmap.save(buffer, "PNG")
-        image_data = buffer.getvalue()
+        image_data = buffer.data().data()
         
         # 创建元数据
         metadata = ScreenshotMetadata(
@@ -477,6 +478,13 @@ class MainWindow(QMainWindow):
         """退出应用"""
         self._save_settings()
         self.app.quit()
+        
+    def showEvent(self, event):
+        """显示事件"""
+        super().showEvent(event)
+        # 确保窗口被激活
+        self.raise_()
+        self.activateWindow()
         
     def closeEvent(self, event):
         """关闭事件"""

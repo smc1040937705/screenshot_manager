@@ -41,9 +41,11 @@ class ImageCanvas(QWidget):
         super().__init__(parent)
         self._pixmap: Optional[QPixmap] = None
         self._original_pixmap: Optional[QPixmap] = None
+        self._display_pixmap: Optional[QPixmap] = None  # 用于显示的缩放后图片
         self._annotation_manager = AnnotationManager()
         self._edit_mode = EditMode.VIEW
         self._scale_factor = 1.0
+        self._offset = QPoint(0, 0)  # 图片绘制偏移量
         
         # 绘制状态
         self._is_drawing = False
@@ -52,7 +54,7 @@ class ImageCanvas(QWidget):
         self._temp_annotation: Optional[object] = None
         
         # 设置
-        self.setMinimumSize(400, 300)
+        self.setMinimumSize(200, 150)
         self.setCursor(Qt.CursorShape.ArrowCursor)
         
     def set_pixmap(self, pixmap: QPixmap):
@@ -117,6 +119,11 @@ class ImageCanvas(QWidget):
         self._annotation_manager.deserialize(json_str)
         self._update_display()
         
+    def resizeEvent(self, event):
+        """窗口大小变化时重新绘制"""
+        super().resizeEvent(event)
+        self.update()  # 触发重绘
+        
     def paintEvent(self, event):
         """绘制事件"""
         painter = QPainter(self)
@@ -125,31 +132,64 @@ class ImageCanvas(QWidget):
         # 绘制背景
         painter.fillRect(self.rect(), QColor("#2d2d2d"))
         
-        if self._pixmap:
-            # 计算居中位置
-            x = (self.width() - self._pixmap.width()) // 2
-            y = (self.height() - self._pixmap.height()) // 2
+        if self._pixmap and not self._pixmap.isNull():
+            # 计算缩放比例以适应窗口
+            canvas_width = self.width()
+            canvas_height = self.height()
+            img_width = self._pixmap.width()
+            img_height = self._pixmap.height()
+            
+            # 计算缩放比例
+            scale_x = canvas_width / img_width
+            scale_y = canvas_height / img_height
+            self._scale_factor = min(scale_x, scale_y, 1.0)  # 不放大超过原尺寸
+            
+            # 计算显示尺寸和位置
+            display_width = int(img_width * self._scale_factor)
+            display_height = int(img_height * self._scale_factor)
+            self._offset = QPoint(
+                (canvas_width - display_width) // 2,
+                (canvas_height - display_height) // 2
+            )
+            
+            # 缩放图片用于显示
+            self._display_pixmap = self._pixmap.scaled(
+                display_width,
+                display_height,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
             
             # 绘制图片
-            painter.drawPixmap(x, y, self._pixmap)
+            painter.drawPixmap(self._offset, self._display_pixmap)
             
-            # 绘制临时标注
+            # 绘制临时标注（需要缩放坐标）
             if self._temp_annotation:
-                painter.translate(x, y)
+                painter.save()
+                painter.translate(self._offset)
+                painter.scale(self._scale_factor, self._scale_factor)
+                
                 if isinstance(self._temp_annotation, MosaicAnnotation):
                     self._temp_annotation.draw(painter, self._original_pixmap.toImage())
                 else:
                     self._temp_annotation.draw(painter)
+                
+                painter.restore()
     
     def mousePressEvent(self, event: QMouseEvent):
         """鼠标按下"""
-        if self._edit_mode == EditMode.VIEW or not self._original_pixmap:
+        if not self._original_pixmap:
             return
             
         if event.button() == Qt.MouseButton.LeftButton:
-            self._is_drawing = True
-            self._draw_start = self._map_to_image(event.pos())
-            self._draw_end = self._draw_start
+            # 文字模式下点击直接显示对话框
+            if self._edit_mode == EditMode.TEXT:
+                pos = self._map_to_image(event.pos())
+                self.show_text_dialog(pos)
+            elif self._edit_mode != EditMode.VIEW:
+                self._is_drawing = True
+                self._draw_start = self._map_to_image(event.pos())
+                self._draw_end = self._draw_start
             
     def mouseMoveEvent(self, event: QMouseEvent):
         """鼠标移动"""
@@ -174,14 +214,19 @@ class ImageCanvas(QWidget):
                 self.annotation_added.emit()
                 
     def _map_to_image(self, pos: QPoint) -> QPoint:
-        """将窗口坐标映射到图片坐标"""
-        if not self._pixmap:
+        """将窗口坐标映射到原始图片坐标（考虑缩放）"""
+        if not self._pixmap or self._scale_factor == 0:
             return pos
             
-        x = (self.width() - self._pixmap.width()) // 2
-        y = (self.height() - self._pixmap.height()) // 2
+        # 转换为图片相对坐标
+        img_x = (pos.x() - self._offset.x()) / self._scale_factor
+        img_y = (pos.y() - self._offset.y()) / self._scale_factor
         
-        return QPoint(pos.x() - x, pos.y() - y)
+        # 确保坐标在图片范围内
+        img_x = max(0, min(img_x, self._pixmap.width() - 1))
+        img_y = max(0, min(img_y, self._pixmap.height() - 1))
+        
+        return QPoint(int(img_x), int(img_y))
     
     def _update_temp_annotation(self):
         """更新临时标注"""
@@ -210,6 +255,7 @@ class ImageCanvas(QWidget):
             self._original_pixmap, 
             self._annotation_manager.annotations
         )
+        self.update()
         
     def show_text_dialog(self, pos: QPoint):
         """显示文字输入对话框"""
@@ -256,35 +302,62 @@ class ImageEditorWidget(QWidget):
         
         # 工具栏
         toolbar = QFrame()
-        toolbar.setStyleSheet("background-color: #f5f5f5; border-bottom: 1px solid #ddd;")
+        toolbar.setStyleSheet("background-color: #2d2d2d; border-bottom: 1px solid #555; color: white;")
         toolbar_layout = QHBoxLayout(toolbar)
         toolbar_layout.setContentsMargins(10, 5, 10, 5)
         
         # 编辑模式选择
         mode_group = QGroupBox("标注工具")
+        mode_group.setStyleSheet("QGroupBox { color: white; border: 1px solid #555; margin-top: 6px; } QGroupBox::title { subcontrol-origin: margin; left: 7px; padding: 0px 5px 0px 5px; }")
         mode_layout = QHBoxLayout(mode_group)
         mode_layout.setSpacing(5)
         
         self.mode_buttons = QButtonGroup(self)
         
+        radio_style = """
+            QRadioButton { 
+                color: white; 
+                padding: 5px;
+            }
+            QRadioButton::indicator {
+                width: 14px;
+                height: 14px;
+                border-radius: 7px;
+                border: 2px solid #888;
+                background-color: #3d3d3d;
+            }
+            QRadioButton::indicator:checked {
+                background-color: #0078D4;
+                border-color: #0078D4;
+            }
+            QRadioButton::indicator:hover {
+                border-color: #0078D4;
+            }
+        """
+        
         self.view_btn = QRadioButton("查看")
+        self.view_btn.setStyleSheet(radio_style)
         self.view_btn.setChecked(True)
         self.mode_buttons.addButton(self.view_btn, EditMode.VIEW.value)
         mode_layout.addWidget(self.view_btn)
         
         self.rect_btn = QRadioButton("矩形")
+        self.rect_btn.setStyleSheet(radio_style)
         self.mode_buttons.addButton(self.rect_btn, EditMode.RECTANGLE.value)
         mode_layout.addWidget(self.rect_btn)
         
         self.arrow_btn = QRadioButton("箭头")
+        self.arrow_btn.setStyleSheet(radio_style)
         self.mode_buttons.addButton(self.arrow_btn, EditMode.ARROW.value)
         mode_layout.addWidget(self.arrow_btn)
         
         self.text_btn = QRadioButton("文字")
+        self.text_btn.setStyleSheet(radio_style)
         self.mode_buttons.addButton(self.text_btn, EditMode.TEXT.value)
         mode_layout.addWidget(self.text_btn)
         
         self.mosaic_btn = QRadioButton("马赛克")
+        self.mosaic_btn.setStyleSheet(radio_style)
         self.mode_buttons.addButton(self.mosaic_btn, EditMode.MOSAIC.value)
         mode_layout.addWidget(self.mosaic_btn)
         
@@ -295,6 +368,7 @@ class ImageEditorWidget(QWidget):
         
         # 颜色选择
         color_group = QGroupBox("颜色")
+        color_group.setStyleSheet("QGroupBox { color: white; border: 1px solid #555; margin-top: 6px; } QGroupBox::title { subcontrol-origin: margin; left: 7px; padding: 0px 5px 0px 5px; }")
         color_layout = QHBoxLayout(color_group)
         
         self.color_btn = QPushButton()
@@ -307,11 +381,59 @@ class ImageEditorWidget(QWidget):
         
         # 线宽选择
         width_group = QGroupBox("线宽")
+        width_group.setStyleSheet("QGroupBox { color: white; border: 1px solid #555; margin-top: 6px; } QGroupBox::title { subcontrol-origin: margin; left: 7px; padding: 0px 5px 0px 5px; }")
         width_layout = QHBoxLayout(width_group)
         
         self.width_spin = QSpinBox()
         self.width_spin.setRange(1, 20)
         self.width_spin.setValue(2)
+        self.width_spin.setFixedSize(70, 28)
+        self.width_spin.setStyleSheet("""
+            QSpinBox { 
+                background-color: #3d3d3d; 
+                color: white; 
+                border: 1px solid #555;
+                border-radius: 3px;
+                padding-right: 22px;
+            }
+            QSpinBox::up-button {
+                subcontrol-origin: border;
+                subcontrol-position: top right;
+                width: 20px;
+                border-left: 1px solid #555;
+                border-bottom: 1px solid #555;
+                border-top-right-radius: 3px;
+                background-color: #4d4d4d;
+            }
+            QSpinBox::down-button {
+                subcontrol-origin: border;
+                subcontrol-position: bottom right;
+                width: 20px;
+                border-left: 1px solid #555;
+                border-bottom-right-radius: 3px;
+                background-color: #4d4d4d;
+            }
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+                background-color: #0078D4;
+            }
+            QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {
+                background-color: #005399;
+            }
+            QSpinBox::up-arrow {
+                width: 0;
+                height: 0;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-bottom: 5px solid white;
+            }
+            QSpinBox::down-arrow {
+                width: 0;
+                height: 0;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid white;
+            }
+        """)
         self.width_spin.valueChanged.connect(self._on_width_changed)
         width_layout.addWidget(self.width_spin)
         
@@ -321,10 +443,12 @@ class ImageEditorWidget(QWidget):
         
         # 撤销和清空
         self.undo_btn = QPushButton("撤销")
+        self.undo_btn.setStyleSheet("QPushButton { background-color: #3d3d3d; color: white; border: 1px solid #555; padding: 5px 10px; } QPushButton:hover { background-color: #4d4d4d; }")
         self.undo_btn.clicked.connect(self._on_undo)
         toolbar_layout.addWidget(self.undo_btn)
         
         self.clear_btn = QPushButton("清空标注")
+        self.clear_btn.setStyleSheet("QPushButton { background-color: #3d3d3d; color: white; border: 1px solid #555; padding: 5px 10px; } QPushButton:hover { background-color: #4d4d4d; }")
         self.clear_btn.clicked.connect(self._on_clear)
         toolbar_layout.addWidget(self.clear_btn)
         
@@ -332,10 +456,12 @@ class ImageEditorWidget(QWidget):
         
         # 操作按钮
         self.save_btn = QPushButton("保存")
+        self.save_btn.setStyleSheet("QPushButton { background-color: #3d3d3d; color: white; border: 1px solid #555; padding: 5px 10px; } QPushButton:hover { background-color: #4d4d4d; }")
         self.save_btn.clicked.connect(self.save_requested.emit)
         toolbar_layout.addWidget(self.save_btn)
         
         self.copy_btn = QPushButton("复制")
+        self.copy_btn.setStyleSheet("QPushButton { background-color: #3d3d3d; color: white; border: 1px solid #555; padding: 5px 10px; } QPushButton:hover { background-color: #4d4d4d; }")
         self.copy_btn.clicked.connect(self.copy_requested.emit)
         toolbar_layout.addWidget(self.copy_btn)
         
@@ -345,11 +471,12 @@ class ImageEditorWidget(QWidget):
         self.canvas = ImageCanvas()
         self.canvas.annotation_added.connect(self._on_annotation_changed)
         self.canvas.annotation_modified.connect(self._on_annotation_changed)
-        layout.addWidget(self.canvas)
+        layout.addWidget(self.canvas, stretch=1)  # 让画布占用所有可用空间
         
         # 底部状态栏
         self.status_label = QLabel("就绪")
-        self.status_label.setStyleSheet("color: #666; padding: 5px;")
+        self.status_label.setStyleSheet("color: #aaa; padding: 5px; background-color: #2d2d2d; border-top: 1px solid #555;")
+        self.status_label.setFixedHeight(28)
         layout.addWidget(self.status_label)
         
         self._current_color = "#FF0000"
