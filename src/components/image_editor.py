@@ -36,11 +36,13 @@ class ImageCanvas(QWidget):
     
     annotation_added = pyqtSignal()  # 标注添加信号
     annotation_modified = pyqtSignal()  # 标注修改信号
+    text_annotation_finished = pyqtSignal()  # 文字标注完成信号
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self._pixmap: Optional[QPixmap] = None
         self._original_pixmap: Optional[QPixmap] = None
+        self._display_pixmap: Optional[QPixmap] = None  # 用于显示的缩放后图片
         self._annotation_manager = AnnotationManager()
         self._edit_mode = EditMode.VIEW
         self._scale_factor = 1.0
@@ -125,17 +127,18 @@ class ImageCanvas(QWidget):
         # 绘制背景
         painter.fillRect(self.rect(), QColor("#2d2d2d"))
         
-        if self._pixmap:
+        if self._display_pixmap:
             # 计算居中位置
-            x = (self.width() - self._pixmap.width()) // 2
-            y = (self.height() - self._pixmap.height()) // 2
+            x = (self.width() - self._display_pixmap.width()) // 2
+            y = (self.height() - self._display_pixmap.height()) // 2
             
             # 绘制图片
-            painter.drawPixmap(x, y, self._pixmap)
+            painter.drawPixmap(x, y, self._display_pixmap)
             
-            # 绘制临时标注
+            # 绘制临时标注（需要缩放坐标）
             if self._temp_annotation:
                 painter.translate(x, y)
+                painter.scale(self._scale_factor, self._scale_factor)
                 if isinstance(self._temp_annotation, MosaicAnnotation):
                     self._temp_annotation.draw(painter, self._original_pixmap.toImage())
                 else:
@@ -147,6 +150,12 @@ class ImageCanvas(QWidget):
             return
             
         if event.button() == Qt.MouseButton.LeftButton:
+            # 文字模式特殊处理
+            if self._edit_mode == EditMode.TEXT:
+                pos = self._map_to_image(event.pos())
+                self.show_text_dialog(pos)
+                return
+                
             self._is_drawing = True
             self._draw_start = self._map_to_image(event.pos())
             self._draw_end = self._draw_start
@@ -174,14 +183,27 @@ class ImageCanvas(QWidget):
                 self.annotation_added.emit()
                 
     def _map_to_image(self, pos: QPoint) -> QPoint:
-        """将窗口坐标映射到图片坐标"""
-        if not self._pixmap:
+        """将窗口坐标映射到图片坐标（考虑缩放）"""
+        if not self._display_pixmap or not self._pixmap:
             return pos
             
-        x = (self.width() - self._pixmap.width()) // 2
-        y = (self.height() - self._pixmap.height()) // 2
+        # 计算显示图片的偏移
+        display_x = (self.width() - self._display_pixmap.width()) // 2
+        display_y = (self.height() - self._display_pixmap.height()) // 2
         
-        return QPoint(pos.x() - x, pos.y() - y)
+        # 将鼠标坐标转换为相对于显示图片的坐标
+        rel_x = pos.x() - display_x
+        rel_y = pos.y() - display_y
+        
+        # 考虑缩放因子，转换回原始图片坐标
+        if self._scale_factor > 0:
+            img_x = int(rel_x / self._scale_factor)
+            img_y = int(rel_y / self._scale_factor)
+        else:
+            img_x = rel_x
+            img_y = rel_y
+        
+        return QPoint(img_x, img_y)
     
     def _update_temp_annotation(self):
         """更新临时标注"""
@@ -211,6 +233,43 @@ class ImageCanvas(QWidget):
             self._annotation_manager.annotations
         )
         
+        # 计算缩放比例以适应画布
+        canvas_width = self.width() - 20  # 留一些边距
+        canvas_height = self.height() - 20
+        
+        img_width = self._pixmap.width()
+        img_height = self._pixmap.height()
+        
+        # 计算缩放因子
+        scale_x = canvas_width / img_width if img_width > 0 else 1.0
+        scale_y = canvas_height / img_height if img_height > 0 else 1.0
+        self._scale_factor = min(scale_x, scale_y, 1.0)  # 不超过原始大小
+        
+        # 如果图片比画布小，使用原始大小
+        if img_width <= canvas_width and img_height <= canvas_height:
+            self._scale_factor = 1.0
+        
+        # 创建缩放后的显示图片
+        if self._scale_factor < 1.0:
+            new_width = int(img_width * self._scale_factor)
+            new_height = int(img_height * self._scale_factor)
+            self._display_pixmap = self._pixmap.scaled(
+                new_width, new_height,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+        else:
+            self._display_pixmap = self._pixmap
+        
+        # 触发重绘
+        self.update()
+        
+    def resizeEvent(self, event):
+        """窗口大小改变时重新计算缩放"""
+        super().resizeEvent(event)
+        if self._original_pixmap:
+            self._update_display()
+        
     def show_text_dialog(self, pos: QPoint):
         """显示文字输入对话框"""
         dialog = QDialog(self)
@@ -235,6 +294,9 @@ class ImageCanvas(QWidget):
             self._annotation_manager.add_annotation(text_annotation)
             self._update_display()
             self.annotation_added.emit()
+        
+        # 文字标注完成，发送信号
+        self.text_annotation_finished.emit()
 
 
 class ImageEditorWidget(QWidget):
@@ -256,7 +318,81 @@ class ImageEditorWidget(QWidget):
         
         # 工具栏
         toolbar = QFrame()
-        toolbar.setStyleSheet("background-color: #f5f5f5; border-bottom: 1px solid #ddd;")
+        toolbar.setStyleSheet("""
+            QFrame {
+                background-color: #3d3d3d;
+                border-bottom: 1px solid #555;
+            }
+            QGroupBox {
+                color: #eee;
+                border: 1px solid #555;
+                margin-top: 8px;
+                font-weight: bold;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+            QRadioButton {
+                color: #eee;
+                spacing: 5px;
+            }
+            QRadioButton::indicator {
+                width: 14px;
+                height: 14px;
+                border-radius: 7px;
+                border: 2px solid #888;
+                background-color: #2d2d2d;
+            }
+            QRadioButton::indicator:checked {
+                border: 2px solid #0078D4;
+                background-color: #0078D4;
+            }
+            QRadioButton::indicator:hover {
+                border: 2px solid #aaa;
+            }
+            QPushButton {
+                background-color: #4d4d4d;
+                color: #eee;
+                border: 1px solid #555;
+                padding: 5px 15px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #5d5d5d;
+            }
+            QPushButton:pressed {
+                background-color: #0078D4;
+            }
+            QPushButton:checked {
+                background-color: #0078D4;
+                border: 1px solid #0078D4;
+            }
+            QSpinBox {
+                background-color: #2d2d2d;
+                color: #eee;
+                border: 1px solid #555;
+                padding: 3px;
+                min-width: 50px;
+            }
+            QSpinBox::up-button {
+                background-color: #4d4d4d;
+                border: 1px solid #555;
+                width: 16px;
+            }
+            QSpinBox::up-button:hover {
+                background-color: #5d5d5d;
+            }
+            QSpinBox::down-button {
+                background-color: #4d4d4d;
+                border: 1px solid #555;
+                width: 16px;
+            }
+            QSpinBox::down-button:hover {
+                background-color: #5d5d5d;
+            }
+        """)
         toolbar_layout = QHBoxLayout(toolbar)
         toolbar_layout.setContentsMargins(10, 5, 10, 5)
         
@@ -345,11 +481,12 @@ class ImageEditorWidget(QWidget):
         self.canvas = ImageCanvas()
         self.canvas.annotation_added.connect(self._on_annotation_changed)
         self.canvas.annotation_modified.connect(self._on_annotation_changed)
+        self.canvas.text_annotation_finished.connect(self._on_text_annotation_finished)
         layout.addWidget(self.canvas)
         
         # 底部状态栏
         self.status_label = QLabel("就绪")
-        self.status_label.setStyleSheet("color: #666; padding: 5px;")
+        self.status_label.setStyleSheet("color: #aaa; padding: 5px; background-color: #2d2d2d;")
         layout.addWidget(self.status_label)
         
         self._current_color = "#FF0000"
@@ -377,10 +514,8 @@ class ImageEditorWidget(QWidget):
         self.canvas.set_edit_mode(mode)
         
         if mode == EditMode.TEXT:
-            # 文字模式需要特殊处理
-            self.canvas.show_text_dialog(QPoint(50, 50))
-            self.view_btn.setChecked(True)
-            self.canvas.set_edit_mode(EditMode.VIEW)
+            # 文字模式需要特殊处理 - 等待用户点击图片位置
+            self.status_label.setText("请点击图片位置添加文字")
             
     def _on_color_clicked(self):
         """颜色按钮点击"""
@@ -407,6 +542,13 @@ class ImageEditorWidget(QWidget):
         
     def _on_annotation_changed(self):
         """标注变化"""
+        self._update_status()
+        
+    def _on_text_annotation_finished(self):
+        """文字标注完成"""
+        # 切换回查看模式
+        self.view_btn.setChecked(True)
+        self.canvas.set_edit_mode(EditMode.VIEW)
         self._update_status()
         
     def _update_status(self):

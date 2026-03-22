@@ -45,9 +45,6 @@ class ScreenshotResult:
 class RegionSelector(QWidget):
     """区域选择器 - 用于区域截图"""
     
-    selection_completed = Callable[[QRect], None]
-    selection_cancelled = Callable[[], None]
-    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowFlags(
