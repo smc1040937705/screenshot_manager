@@ -8,7 +8,7 @@ from typing import List, Optional, Callable
 from pathlib import Path
 from datetime import datetime
 
-from PyQt6.QtCore import QObject, pyqtSignal, QThread
+from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt
 from PyQt6.QtGui import QPixmap, QImage, QPainter, QPdfWriter, QPageSize
 
 
@@ -206,5 +206,4 @@ class ExportManager(QObject):
             self._current_worker = None
 
 
-# 导入Qt
-from PyQt6.QtCore import Qt
+

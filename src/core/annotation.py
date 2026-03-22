@@ -82,6 +82,7 @@ class RectangleAnnotation(AnnotationData):
     def from_dict(cls, data: Dict[str, Any]) -> "RectangleAnnotation":
         rect_data = data["rect"]
         return cls(
+            annotation_type=AnnotationType.RECTANGLE,
             rect=QRect(rect_data[0], rect_data[1], rect_data[2], rect_data[3]),
             color=data["color"],
             line_width=data["line_width"],
@@ -130,6 +131,7 @@ class ArrowAnnotation(AnnotationData):
         start_data = data["start"]
         end_data = data["end"]
         return cls(
+            annotation_type=AnnotationType.ARROW,
             start=QPoint(start_data[0], start_data[1]),
             end=QPoint(end_data[0], end_data[1]),
             color=data["color"],
@@ -204,6 +206,7 @@ class TextAnnotation(AnnotationData):
     def from_dict(cls, data: Dict[str, Any]) -> "TextAnnotation":
         pos_data = data["pos"]
         return cls(
+            annotation_type=AnnotationType.TEXT,
             text=data["text"],
             pos=QPoint(pos_data[0], pos_data[1]),
             color=data["color"],
@@ -260,6 +263,7 @@ class MosaicAnnotation(AnnotationData):
     def from_dict(cls, data: Dict[str, Any]) -> "MosaicAnnotation":
         rect_data = data["rect"]
         return cls(
+            annotation_type=AnnotationType.MOSAIC,
             rect=QRect(rect_data[0], rect_data[1], rect_data[2], rect_data[3]),
             color=data["color"],
             line_width=data["line_width"],

@@ -106,7 +106,8 @@ class TrayManager(QObject):
     
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason):
         """托盘图标被激活"""
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+        if reason in (QSystemTrayIcon.ActivationReason.DoubleClick, 
+                      QSystemTrayIcon.ActivationReason.Trigger):
             self._on_show_window()
     
     def _on_screenshot(self):

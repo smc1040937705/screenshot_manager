@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
-from PyQt6.QtCore import Qt, QSettings, QSize, QPoint, pyqtSignal
+from PyQt6.QtCore import Qt, QSettings, QSize, QPoint, pyqtSignal, QBuffer
 from PyQt6.QtGui import QPixmap, QKeySequence, QShortcut, QAction
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -73,7 +73,7 @@ class MainWindow(QMainWindow):
         # 托盘管理器
         self.tray_manager = TrayManager(self.app)
         self.tray_manager.screenshot_requested.connect(self._on_screenshot_fullscreen)
-        self.tray_manager.show_window_requested.connect(self.show)
+        self.tray_manager.show_window_requested.connect(self._show_main_window)
         self.tray_manager.exit_requested.connect(self._on_exit)
         self.tray_manager.show()
         
@@ -281,11 +281,14 @@ class MainWindow(QMainWindow):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"screenshot_{timestamp}.png"
         
-        # 保存图片
-        import io
-        buffer = io.BytesIO()
+        # 保存图片到字节数组
+        from PyQt6.QtCore import QByteArray
+        byte_array = QByteArray()
+        buffer = QBuffer(byte_array)
+        buffer.open(QBuffer.OpenModeFlag.WriteOnly)
         result.pixmap.save(buffer, "PNG")
-        image_data = buffer.getvalue()
+        buffer.close()
+        image_data = byte_array.data()
         
         # 创建元数据
         metadata = ScreenshotMetadata(
@@ -472,6 +475,12 @@ class MainWindow(QMainWindow):
             "<li>导出为 PNG/PDF</li>"
             "</ul>"
         )
+        
+    def _show_main_window(self):
+        """显示主窗口"""
+        self.show()
+        self.raise_()
+        self.activateWindow()
         
     def _on_exit(self):
         """退出应用"""

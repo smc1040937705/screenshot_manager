@@ -40,9 +40,9 @@ class ScreenshotItemDelegate(QStyledItemDelegate):
         if option.state & QStyle.StateFlag.State_Selected:
             painter.fillRect(option.rect, QColor("#0078D4"))
         elif option.state & QStyle.StateFlag.State_MouseOver:
-            painter.fillRect(option.rect, QColor("#E5F3FF"))
+            painter.fillRect(option.rect, QColor("#3d3d3d"))
         else:
-            painter.fillRect(option.rect, QColor("white"))
+            painter.fillRect(option.rect, QColor("#2d2d2d"))
         
         # 绘制缩略图占位
         thumb_rect = option.rect.adjusted(self.padding, self.padding, 
@@ -117,9 +117,12 @@ class HistoryListWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
+        # 设置整体背景色
+        self.setStyleSheet("background-color: #2d2d2d;")
+        
         # 搜索栏
         search_frame = QFrame()
-        search_frame.setStyleSheet("background-color: #f5f5f5; border-bottom: 1px solid #ddd;")
+        search_frame.setStyleSheet("background-color: #3d3d3d; border-bottom: 1px solid #555;")
         search_layout = QHBoxLayout(search_frame)
         search_layout.setContentsMargins(10, 10, 10, 10)
         
@@ -127,10 +130,11 @@ class HistoryListWidget(QWidget):
         self.search_edit.setPlaceholderText("搜索标题、标签、备注...")
         self.search_edit.setStyleSheet("""
             QLineEdit {
-                border: 1px solid #ccc;
+                border: 1px solid #555;
                 border-radius: 4px;
                 padding: 6px;
-                background: white;
+                background: #2d2d2d;
+                color: #eee;
             }
         """)
         self.search_edit.textChanged.connect(self._on_search_text_changed)
@@ -143,11 +147,11 @@ class HistoryListWidget(QWidget):
             QPushButton {
                 border: none;
                 background: transparent;
-                color: #666;
+                color: #999;
                 font-size: 14px;
             }
             QPushButton:hover {
-                color: #333;
+                color: #eee;
             }
         """)
         self.clear_btn.clicked.connect(self._clear_search)
@@ -164,11 +168,11 @@ class HistoryListWidget(QWidget):
         self.list_widget.setStyleSheet("""
             QListWidget {
                 border: none;
-                background-color: white;
+                background-color: #2d2d2d;
                 outline: none;
             }
             QListWidget::item {
-                border-bottom: 1px solid #eee;
+                border-bottom: 1px solid #444;
             }
         """)
         
@@ -180,7 +184,7 @@ class HistoryListWidget(QWidget):
         
         # 状态栏
         self.status_label = QLabel("共 0 张截图")
-        self.status_label.setStyleSheet("color: #666; padding: 5px;")
+        self.status_label.setStyleSheet("color: #aaa; padding: 5px; background-color: #2d2d2d;")
         layout.addWidget(self.status_label)
         
     def set_screenshots(self, screenshots: List[ScreenshotMetadata]):
