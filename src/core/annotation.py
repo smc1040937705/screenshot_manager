@@ -277,31 +277,57 @@ class MosaicAnnotation(AnnotationData):
         if source_image is None:
             return
         
-        # 获取马赛克区域
         x, y = self.rect.x(), self.rect.y()
         w, h = self.rect.width(), self.rect.height()
         
-        # 确保在图像范围内
-        img_w, img_h = source_image.width(), source_image.height()
-        x = max(0, min(x, img_w - 1))
-        y = max(0, min(y, img_h - 1))
-        w = min(w, img_w - x)
-        h = min(h, img_h - y)
+        if w <= 0 or h <= 0:
+            return
         
-        # 绘制马赛克块
-        for row in range(y, y + h, self.block_size):
-            for col in range(x, x + w, self.block_size):
-                # 计算块的实际大小
-                block_w = min(self.block_size, x + w - col)
-                block_h = min(self.block_size, y + h - row)
+        img_w, img_h = source_image.width(), source_image.height()
+        
+        start_x = max(0, x)
+        start_y = max(0, y)
+        end_x = min(x + w, img_w)
+        end_y = min(y + h, img_h)
+        
+        if start_x >= end_x or start_y >= end_y:
+            return
+        
+        transform = painter.transform()
+        scale_x = transform.m11()
+        scale_y = transform.m22()
+        
+        painter.save()
+        painter.resetTransform()
+        
+        offset_x = transform.dx()
+        offset_y = transform.dy()
+        
+        for row in range(start_y, end_y, self.block_size):
+            for col in range(start_x, end_x, self.block_size):
+                block_w = min(self.block_size, end_x - col)
+                block_h = min(self.block_size, end_y - row)
                 
-                # 获取块中心的颜色
-                center_x = col + block_w // 2
-                center_y = row + block_h // 2
+                if block_w <= 0 or block_h <= 0:
+                    continue
+                
+                center_x = min(col + block_w // 2, img_w - 1)
+                center_y = min(row + block_h // 2, img_h - 1)
+                
+                if center_x < 0 or center_y < 0:
+                    continue
+                
                 color = QColor(source_image.pixel(center_x, center_y))
                 
-                # 绘制块
-                painter.fillRect(col, row, block_w, block_h, color)
+                draw_x = int(col * scale_x + offset_x)
+                draw_y = int(row * scale_y + offset_y)
+                draw_w = int(block_w * scale_x)
+                draw_h = int(block_h * scale_y)
+                
+                if draw_w > 0 and draw_h > 0:
+                    painter.fillRect(draw_x, draw_y, draw_w, draw_h, color)
+        
+        painter.restore()
 
 
 class AnnotationManager:
@@ -419,7 +445,13 @@ class AnnotationManager:
     def deserialize(self, json_str: str):
         """从JSON字符串反序列化标注"""
         self.annotations.clear()
-        data = json.loads(json_str)
+        if not json_str or not json_str.strip():
+            return
+        try:
+            data = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            print(f"Failed to parse annotation JSON: {e}")
+            return
         for item in data:
             try:
                 annotation = AnnotationData.from_dict(item)

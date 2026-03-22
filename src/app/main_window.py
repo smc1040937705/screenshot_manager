@@ -56,48 +56,43 @@ class MainWindow(QMainWindow):
         
     def _init_managers(self):
         """初始化管理器"""
-        # 存储管理器
         storage_path = Path.home() / ".screenshot_manager"
         self.storage = StorageManager(str(storage_path))
         
-        # 截图捕获器
         self.screenshot_capture = ScreenshotCapture(self.app)
         
-        # 剪贴板管理器
         self.clipboard = ClipboardManager(self.app)
         
-        # 导出管理器
         self.export_manager = ExportManager()
         self.export_manager.export_finished.connect(self._on_export_finished)
         
-        # 托盘管理器
         self.tray_manager = TrayManager(self.app)
         self.tray_manager.screenshot_requested.connect(self._on_screenshot_fullscreen)
-        self.tray_manager.show_window_requested.connect(self.show)
+        self.tray_manager.show_window_requested.connect(self._on_show_window)
         self.tray_manager.exit_requested.connect(self._on_exit)
         self.tray_manager.show()
         
-        # 设置
         self.settings = QSettings("ScreenshotManager", "MainWindow")
         
-        # 当前选中的截图
         self._current_screenshot: Optional[ScreenshotMetadata] = None
         
     def _setup_ui(self):
         """设置UI"""
-        # 中央部件
         central_widget = QWidget()
+        central_widget.setStyleSheet("background-color: #2d2d2d;")
         self.setCentralWidget(central_widget)
         
-        # 主布局
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # 分割器
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #3d3d3d;
+            }
+        """)
         
-        # 左侧：历史列表
         self.history_list = HistoryListWidget()
         self.history_list.item_selected.connect(self._on_history_item_selected)
         self.history_list.item_double_clicked.connect(self._on_history_item_double_clicked)
@@ -107,13 +102,11 @@ class MainWindow(QMainWindow):
         self.history_list.setMaximumWidth(400)
         self.splitter.addWidget(self.history_list)
         
-        # 右侧：图片编辑器
         self.image_editor = ImageEditorWidget()
         self.image_editor.save_requested.connect(self._on_save_current)
         self.image_editor.copy_requested.connect(self._on_copy_current)
         self.splitter.addWidget(self.image_editor)
         
-        # 设置分割器比例
         self.splitter.setSizes([300, 900])
         
         main_layout.addWidget(self.splitter)
@@ -121,11 +114,38 @@ class MainWindow(QMainWindow):
     def _setup_menu(self):
         """设置菜单"""
         menubar = self.menuBar()
+        menubar.setStyleSheet("""
+            QMenuBar {
+                background-color: #3d3d3d;
+                color: #ddd;
+                border-bottom: 1px solid #555;
+            }
+            QMenuBar::item {
+                padding: 5px 10px;
+            }
+            QMenuBar::item:selected {
+                background-color: #4d4d4d;
+            }
+            QMenu {
+                background-color: #3d3d3d;
+                color: #ddd;
+                border: 1px solid #555;
+            }
+            QMenu::item {
+                padding: 5px 30px;
+            }
+            QMenu::item:selected {
+                background-color: #0078D4;
+            }
+            QMenu::separator {
+                height: 1px;
+                background-color: #555;
+                margin: 5px 10px;
+            }
+        """)
         
-        # 文件菜单
         file_menu = menubar.addMenu("文件")
         
-        # 截图子菜单
         screenshot_menu = file_menu.addMenu("截图")
         
         fullscreen_action = QAction("全屏截图", self)
@@ -140,13 +160,11 @@ class MainWindow(QMainWindow):
         
         file_menu.addSeparator()
         
-        # 保存
         save_action = QAction("保存", self)
         save_action.setShortcut("Ctrl+S")
         save_action.triggered.connect(self._on_save_current)
         file_menu.addAction(save_action)
         
-        # 另存为
         save_as_action = QAction("另存为...", self)
         save_as_action.setShortcut("Ctrl+Shift+S")
         save_as_action.triggered.connect(self._on_save_as)
@@ -154,7 +172,6 @@ class MainWindow(QMainWindow):
         
         file_menu.addSeparator()
         
-        # 导出
         export_menu = file_menu.addMenu("导出")
         
         export_png_action = QAction("导出为 PNG", self)
@@ -167,13 +184,11 @@ class MainWindow(QMainWindow):
         
         file_menu.addSeparator()
         
-        # 退出
         exit_action = QAction("退出", self)
         exit_action.setShortcut("Alt+F4")
         exit_action.triggered.connect(self._on_exit)
         file_menu.addAction(exit_action)
         
-        # 编辑菜单
         edit_menu = menubar.addMenu("编辑")
         
         copy_action = QAction("复制到剪贴板", self)
@@ -183,12 +198,10 @@ class MainWindow(QMainWindow):
         
         edit_menu.addSeparator()
         
-        # 编辑元数据
         edit_meta_action = QAction("编辑信息...", self)
         edit_meta_action.triggered.connect(self._on_edit_metadata)
         edit_menu.addAction(edit_meta_action)
         
-        # 视图菜单
         view_menu = menubar.addMenu("视图")
         
         refresh_action = QAction("刷新", self)
@@ -196,7 +209,6 @@ class MainWindow(QMainWindow):
         refresh_action.triggered.connect(self._load_history)
         view_menu.addAction(refresh_action)
         
-        # 帮助菜单
         help_menu = menubar.addMenu("帮助")
         
         about_action = QAction("关于", self)
@@ -205,17 +217,22 @@ class MainWindow(QMainWindow):
         
     def _setup_shortcuts(self):
         """设置快捷键"""
-        # 删除
         delete_shortcut = QShortcut(QKeySequence("Delete"), self)
         delete_shortcut.activated.connect(self._on_delete_current)
         
-        # 收藏
         favorite_shortcut = QShortcut(QKeySequence("Ctrl+D"), self)
         favorite_shortcut.activated.connect(self._on_toggle_favorite_current)
         
     def _setup_statusbar(self):
         """设置状态栏"""
         self.statusbar = QStatusBar()
+        self.statusbar.setStyleSheet("""
+            QStatusBar {
+                background-color: #3d3d3d;
+                color: #aaa;
+                border-top: 1px solid #555;
+            }
+        """)
         self.setStatusBar(self.statusbar)
         self.statusbar.showMessage("就绪")
         
@@ -277,33 +294,29 @@ class MainWindow(QMainWindow):
         if not result or result.pixmap.isNull():
             return
             
-        # 生成文件名
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"screenshot_{timestamp}.png"
         
-        # 保存图片
-        import io
-        buffer = io.BytesIO()
+        from PyQt6.QtCore import QBuffer, QByteArray
+        byte_array = QByteArray()
+        buffer = QBuffer(byte_array)
+        buffer.open(QBuffer.OpenModeFlag.WriteOnly)
         result.pixmap.save(buffer, "PNG")
-        image_data = buffer.getvalue()
+        buffer.close()
+        image_data = byte_array.data()
         
-        # 创建元数据
         metadata = ScreenshotMetadata(
             title=f"截图 {timestamp}",
             width=result.pixmap.width(),
             height=result.pixmap.height()
         )
         
-        # 保存到存储
         metadata = self.storage.save_screenshot(image_data, filename, metadata)
         
-        # 添加到列表
         self.history_list.add_screenshot(metadata)
         
-        # 显示通知
         self.tray_manager.show_message("截图完成", f"已保存: {metadata.title}")
         
-        # 选中并显示
         self.history_list.select_screenshot(metadata.id)
         self._on_history_item_selected(metadata)
         
@@ -311,13 +324,11 @@ class MainWindow(QMainWindow):
         """历史项被选中"""
         self._current_screenshot = metadata
         
-        # 加载图片
         if metadata.file_path and os.path.exists(metadata.file_path):
             pixmap = QPixmap(metadata.file_path)
             self.image_editor.set_image(pixmap)
             
-            # 加载标注
-            if metadata.annotation_data:
+            if metadata.annotation_data and metadata.annotation_data.strip():
                 self.image_editor.set_annotations(metadata.annotation_data)
                 
         self.statusbar.showMessage(f"选中: {metadata.title}")
@@ -478,10 +489,15 @@ class MainWindow(QMainWindow):
         self._save_settings()
         self.app.quit()
         
+    def _on_show_window(self):
+        """显示主窗口"""
+        self.show()
+        self.activateWindow()
+        self.raise_()
+        
     def closeEvent(self, event):
         """关闭事件"""
         self._save_settings()
-        # 最小化到托盘而不是退出
         if self.tray_manager.tray_icon and self.tray_manager.tray_icon.isVisible():
             self.hide()
             self.tray_manager.show_message(

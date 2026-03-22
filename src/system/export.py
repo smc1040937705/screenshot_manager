@@ -43,9 +43,8 @@ class ExportWorker(QThread):
             self.export_completed.emit(False, "没有要导出的图片")
             return
         
-        # 创建PDF写入器
         writer = QPdfWriter(self.output_path)
-        writer.setPageSize(QPageSize.PageSize.A4)
+        writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
         writer.setResolution(150)
         
         painter = QPainter(writer)
@@ -55,12 +54,10 @@ class ExportWorker(QThread):
             if i > 0:
                 writer.newPage()
             
-            # 加载图片
             pixmap = QPixmap(image_path)
             if pixmap.isNull():
                 continue
             
-            # 计算缩放比例以适应页面
             page_rect = writer.pageLayout().paintRectPixels(writer.resolution())
             scaled_pixmap = pixmap.scaled(
                 page_rect.width(),
@@ -69,12 +66,10 @@ class ExportWorker(QThread):
                 Qt.TransformationMode.SmoothTransformation
             )
             
-            # 居中绘制
             x = (page_rect.width() - scaled_pixmap.width()) // 2
             y = (page_rect.height() - scaled_pixmap.height()) // 2
             painter.drawPixmap(x, y, scaled_pixmap)
             
-            # 更新进度
             progress = int((i + 1) / total * 100)
             self.progress_updated.emit(progress)
         

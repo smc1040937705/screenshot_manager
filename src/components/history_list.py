@@ -27,47 +27,41 @@ class ScreenshotItemDelegate(QStyledItemDelegate):
         
     def paint(self, painter, option, index):
         """绘制列表项"""
-        # 获取数据
         metadata = index.data(Qt.ItemDataRole.UserRole)
         if not metadata:
             super().paint(painter, option, index)
             return
         
-        # 保存画家状态
         painter.save()
         
-        # 绘制背景
         if option.state & QStyle.StateFlag.State_Selected:
             painter.fillRect(option.rect, QColor("#0078D4"))
         elif option.state & QStyle.StateFlag.State_MouseOver:
-            painter.fillRect(option.rect, QColor("#E5F3FF"))
+            painter.fillRect(option.rect, QColor("#3d3d3d"))
         else:
-            painter.fillRect(option.rect, QColor("white"))
+            painter.fillRect(option.rect, QColor("#2d2d2d"))
         
-        # 绘制缩略图占位
         thumb_rect = option.rect.adjusted(self.padding, self.padding, 
                                           -option.rect.width() + self.thumbnail_size.width() + self.padding * 2, 
                                           -self.padding)
-        painter.setPen(QColor("#CCCCCC"))
+        painter.setPen(QColor("#555555"))
         painter.drawRect(thumb_rect)
         
-        # 绘制标题
         title_rect = option.rect.adjusted(self.thumbnail_size.width() + self.padding * 3, 
                                           self.padding + 5,
                                           -self.padding, 
                                           0)
-        painter.setPen(QColor("white" if option.state & QStyle.StateFlag.State_Selected else "#333333"))
+        painter.setPen(QColor("white" if option.state & QStyle.StateFlag.State_Selected else "#ddd"))
         font = QFont("Microsoft YaHei", 10, QFont.Weight.Bold)
         painter.setFont(font)
         title = metadata.title if metadata.title else metadata.filename
         painter.drawText(title_rect, Qt.TextFlag.TextSingleLine, title)
         
-        # 绘制日期
         date_rect = option.rect.adjusted(self.thumbnail_size.width() + self.padding * 3, 
                                          self.padding + 30,
                                          -self.padding, 
                                          0)
-        painter.setPen(QColor("white" if option.state & QStyle.StateFlag.State_Selected else "#666666"))
+        painter.setPen(QColor("white" if option.state & QStyle.StateFlag.State_Selected else "#999"))
         font = QFont("Microsoft YaHei", 8)
         painter.setFont(font)
         if metadata.created_at:
@@ -76,7 +70,6 @@ class ScreenshotItemDelegate(QStyledItemDelegate):
             date_str = "未知时间"
         painter.drawText(date_rect, Qt.TextFlag.TextSingleLine, date_str)
         
-        # 绘制收藏标记
         if metadata.is_favorite:
             star_rect = option.rect.adjusted(option.rect.width() - 30, 
                                             self.padding + 5,
@@ -87,7 +80,6 @@ class ScreenshotItemDelegate(QStyledItemDelegate):
             painter.setFont(font)
             painter.drawText(star_rect, "★")
         
-        # 恢复画家状态
         painter.restore()
     
     def sizeHint(self, option, index):
@@ -117,9 +109,8 @@ class HistoryListWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # 搜索栏
         search_frame = QFrame()
-        search_frame.setStyleSheet("background-color: #f5f5f5; border-bottom: 1px solid #ddd;")
+        search_frame.setStyleSheet("background-color: #3d3d3d; border-bottom: 1px solid #555;")
         search_layout = QHBoxLayout(search_frame)
         search_layout.setContentsMargins(10, 10, 10, 10)
         
@@ -127,27 +118,30 @@ class HistoryListWidget(QWidget):
         self.search_edit.setPlaceholderText("搜索标题、标签、备注...")
         self.search_edit.setStyleSheet("""
             QLineEdit {
-                border: 1px solid #ccc;
+                border: 1px solid #555;
                 border-radius: 4px;
                 padding: 6px;
-                background: white;
+                background: #4d4d4d;
+                color: #ddd;
+            }
+            QLineEdit::placeholder {
+                color: #888;
             }
         """)
         self.search_edit.textChanged.connect(self._on_search_text_changed)
         search_layout.addWidget(self.search_edit)
         
-        # 清除搜索按钮
         self.clear_btn = QPushButton("×")
         self.clear_btn.setFixedSize(24, 24)
         self.clear_btn.setStyleSheet("""
             QPushButton {
                 border: none;
                 background: transparent;
-                color: #666;
+                color: #888;
                 font-size: 14px;
             }
             QPushButton:hover {
-                color: #333;
+                color: #ddd;
             }
         """)
         self.clear_btn.clicked.connect(self._clear_search)
@@ -156,7 +150,6 @@ class HistoryListWidget(QWidget):
         
         layout.addWidget(search_frame)
         
-        # 列表
         self.list_widget = QListWidget()
         self.list_widget.setItemDelegate(ScreenshotItemDelegate(self.list_widget))
         self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -164,11 +157,11 @@ class HistoryListWidget(QWidget):
         self.list_widget.setStyleSheet("""
             QListWidget {
                 border: none;
-                background-color: white;
+                background-color: #2d2d2d;
                 outline: none;
             }
             QListWidget::item {
-                border-bottom: 1px solid #eee;
+                border-bottom: 1px solid #3d3d3d;
             }
         """)
         
@@ -178,9 +171,8 @@ class HistoryListWidget(QWidget):
         
         layout.addWidget(self.list_widget)
         
-        # 状态栏
         self.status_label = QLabel("共 0 张截图")
-        self.status_label.setStyleSheet("color: #666; padding: 5px;")
+        self.status_label.setStyleSheet("background-color: #2d2d2d; color: #888; padding: 5px;")
         layout.addWidget(self.status_label)
         
     def set_screenshots(self, screenshots: List[ScreenshotMetadata]):
